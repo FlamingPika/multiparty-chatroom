@@ -12,6 +12,8 @@
 #define PORT 6789  // port number
 
 static int sockfd;
+pthread_mutex_t mutexQueue = PTHREAD_MUTEX_INITIALIZER;
+pthread_cond_t condQueue = PTHREAD_COND_INITIALIZER;
 
 void generate_menu(){
 	printf("Hello dear user pls select one of the following options:\n");
@@ -21,11 +23,30 @@ void generate_menu(){
     printf("Or input messages sending to everyone in the chatroom.\n");
 }
 
-void recv_server_msg_handler() {
+void* recv_server_msg_handler() {
     /********************************/
 	/* receive message from the server and desplay on the screen*/
 	/**********************************/
+	char buffer[MAX];
+	int nbytes;
+	while(1){
+		bzero(buffer, sizeof(buffer));
+		pthread_mutex_lock(&mutexQueue);
+		if (nbytes = recv(sockfd, buffer, sizeof(buffer), 0)==-1){
+			perror("recv");
+		}
+		pthread_mutex_unlock(&mutexQueue);
+		printf("%s", buffer);
+	}
+	return NULL;
 
+	// pthread_mutex_lock(&mutex);
+
+    // while (!should_exit) {
+    //     pthread_cond_wait(&cond, &mutex);
+    // }
+
+    // pthread_mutex_unlock(&mutex);
 
 }
 
@@ -38,7 +59,25 @@ int main(){
 	/******************************************************/
 	/* create the client socket and connect to the server */
 	/******************************************************/
+	sockfd = socket(AF_INET, SOCK_STREAM, 0);
+	if (sockfd == -1) {
+		printf("Socket creation failed...\n");
+		exit(0);
+	} else {
+		printf("Socket successfully created...\n");
+	}
 
+	bzero(&server_addr, sizeof(server_addr));
+	server_addr.sin_family = AF_INET;
+	server_addr.sin_addr.s_addr = inet_addr("127.0.0.1");
+	server_addr.sin_port = htons(PORT);
+
+	if (connect(sockfd, (struct sockaddr*)&server_addr, sizeof(server_addr)) != 0) {
+		printf("Connection with the server failed...\n");
+		exit(0);
+	}
+	else
+		printf("Connected to the server...\n");
 
 	generate_menu();
 	// recieve welcome message to enter the nickname
@@ -53,8 +92,12 @@ int main(){
 	/* Note that we concatenate "REGISTER" before the name to notify the server it is the register/login message*/
 	/*******************************************/
 
-
-
+	bzero(buffer, sizeof(buffer));
+	strcpy(buffer, "REGISTER ");
+	n = 9;
+	while ((buffer[n++] = getchar()) != '\n');
+	buffer[n] = '\0';
+	write(sockfd, buffer, sizeof(buffer));
 
     // receive welcome message "welcome xx to joint the chatroom. A new account has been created." (registration case) or "welcome back! The message box contains:..." (login case)
     bzero(buffer, sizeof(buffer));
@@ -67,8 +110,15 @@ int main(){
 	/* Create a thread to receive message from the server*/
 	/* pthread_t recv_server_msg_thread;*/
 	/*****************************************************/
+	pthread_t recv_server_msg_thread;
+    pthread_mutex_init(&mutexQueue, NULL);
+    pthread_cond_init(&condQueue, NULL);
 
+    if (pthread_create(&recv_server_msg_thread, NULL, &recv_server_msg_handler, NULL) != 0) {
+        perror("Failed to create the thread");
+    }
 
+    
     
 	// chat with the server
 	for (;;) {
@@ -110,6 +160,10 @@ int main(){
 			
 		}
 	}
+
+	pthread_mutex_destroy(&mutexQueue);
+    pthread_cond_destroy(&condQueue);
+
 	return 0;
 }
 
