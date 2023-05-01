@@ -35,6 +35,7 @@ void user_add(user_info_t *user){
 	/***************************/
 	/* add the user to the list */
 	/**************************/
+	printf("adding new user: %s\n", user->username);
 	listOfUsers[users_count] = user;
 	users_count++;
 
@@ -47,7 +48,7 @@ int isNewUser(char* name) {
 	/*******************************************/
 	/* Compare the name with existing usernames */
 	/*******************************************/
-	printf("adding new user: %s\n", name);
+	
 	for (i = 0; i < users_count; i++) {
 		if (strcmp(listOfUsers[i]->username, name) == 0) {
 			flag = 1;
@@ -58,13 +59,14 @@ int isNewUser(char* name) {
 	return flag;
 }
 
+/* Get user state by name */
 int get_state(char* name) {
 	int i;
 	int state = -1;
 	/*******************************************/
 	/* Compare the name with existing usernames */
 	/*******************************************/
-	printf("adding new user: %s\n", name);
+
 	for (i = 0; i < users_count; i++) {
 		if (strcmp(listOfUsers[i]->username, name) == 0) {
 			state = listOfUsers[i]->state;
@@ -73,6 +75,38 @@ int get_state(char* name) {
 	}
 
 	return state;
+}
+
+void print_info(char *name) {
+	int i;
+
+	for (i = 0; i < users_count; i++) {
+		if (strcmp(listOfUsers[i]->username, name) == 0) {
+			printf("username: %s\n", listOfUsers[i]->username);
+			printf("sockfd: %d\n", listOfUsers[i]->sockfd);
+			printf("state: %d\n", listOfUsers[i]->state);
+			break;
+		}
+	}
+}
+
+/* Change user state by name */
+void update_status(char* name, int ss) {
+	int i;
+	/*******************************************/
+	/* Compare the name with existing usernames */
+	/*******************************************/
+	for (i = 0; i < users_count; i++) {
+		if (strcmp(listOfUsers[i]->username, name) == 0) {
+			if (listOfUsers[i]->state == 1) {
+				listOfUsers[i]->state = 0;
+			} else {
+				listOfUsers[i]->state = 1;
+				listOfUsers[i]->sockfd = ss;
+			}
+			break;
+		}
+	}
 }
 
 /* Get user name from userList */
@@ -89,7 +123,6 @@ char * get_username(int ss){
 		}
 	}
 
-	printf("get user name: %s\n", uname);
 	return uname;
 }
 
@@ -140,7 +173,7 @@ void del_from_pfds(struct pollfd pfds[], int i, int* fd_count)
 int main(){
 	int listener;     // listening socket descriptor
 	int newfd;        // newly accept()ed socket descriptor
-	int addr_size;     // length of client addr
+	socklen_t addr_size;     // length of client addr
 	struct sockaddr_in server_addr, client_addr;
 	
 	char buffer[MAX]; // buffer for client data
@@ -216,7 +249,7 @@ int main(){
 					if (newfd == -1) {
 						perror("accept");
 					} else {
-						printf("selectserver: new connection from %s on socket %d\n", inet_ntoa(client_addr.sin_addr), pfds[i].fd);
+						printf("selectserver: new connection from %s on socket %d\n", inet_ntoa(client_addr.sin_addr), newfd);
 						add_to_pfds(&pfds, newfd, &fd_count, &fd_size);
 						// send welcome message
 						bzero(buffer, sizeof(buffer));
@@ -254,12 +287,12 @@ int main(){
 								/********************************/
 								/* it is a new user and we need to handle the registration*/
 								/**********************************/
-								user_info_t new_user;
-								new_user.sockfd = pfds[i].fd;
-								strncpy(new_user.username, name, strlen(name));
-								new_user.state = 1;
+								user_info_t *new_user = (user_info_t *)malloc(sizeof(user_info_t));
+								new_user->sockfd = pfds[i].fd;
+								strcpy(new_user->username, name);
+								new_user->state = 1;
 
-								user_add(&new_user); //need handle if full
+								user_add(new_user); //need handle if full
 
 								/********************************/
 								/* create message box (e.g., a text file) for the new user */
@@ -299,18 +332,26 @@ int main(){
 								/********************************/
 								/* it's an existing user and we need to handle the login. Note the state of user,*/
 								/**********************************/
+								// print_info(name);
+								// printf("This socket is %d\n", pfds[i].fd);
 								if (get_state(name) == 1) {
 									bzero(buffer, sizeof(buffer));
 									strcpy(buffer, "You have already logged in!\n");
 									if (send(pfds[i].fd, buffer, sizeof(buffer), 0) == -1)
 										perror("send");
+									close(pfds[i].fd);
+									del_from_pfds(pfds, i, &fd_count);
 								} else {
-									printf("Welcome back! The message box contains:\n");		
+									bzero(buffer, sizeof(buffer));
+									strcpy(buffer, "Welcome back! The message box contains:\n");
+									if (send(pfds[i].fd, buffer, sizeof(buffer), 0) == -1)
+										perror("send");	
 									/********************************/
 									/* send the offline messages to the user and empty the message box*/
 									/**********************************/
-
-
+									print_info(name);
+									update_status(name, pfds[i].fd);
+									print_info(name);
 									char filename[strlen(name) + 4];
 									strcpy(filename, name);
 									strcat(filename, ".txt");
@@ -335,7 +376,7 @@ int main(){
 									/* Broadcast the welcome message*/
 									/*****************************/
 									for(j = 0; j < fd_count; j++){
-										if (pfds[j].fd != listener) {
+										if (pfds[j].fd != listener && pfds[j].fd != pfds[i].fd) {
 											if (send(pfds[j].fd, buffer, sizeof(buffer), 0) == -1)
 												perror("send");
 										}
@@ -346,17 +387,24 @@ int main(){
 						else if (strncmp(buffer, "EXIT", 4)==0){
 							printf("Got exit message. Removing user from system\n");
 							// send leave message to the other members
+							char *name = get_username(pfds[i].fd);
 							bzero(buffer, sizeof(buffer));
-							strcpy(buffer, get_username(pfds[i].fd));
+							strcpy(buffer, name);
 							strcat(buffer, " has left the chatroom\n");
 							/*********************************/
 							/* Broadcast the leave message to the other users in the group*/
 							/**********************************/
-
+							for (j = 0; j < fd_count; j++) {
+								if (pfds[j].fd != listener && pfds[j].fd != pfds[i].fd) {
+									if (send(pfds[j].fd, buffer, sizeof(buffer), 0) == -1)
+										perror("send");
+								}
+							}
 
 							/*********************************/
 							/* Change the state of this user to offline*/
 							/**********************************/
+							update_status(name, 0);
 
 									
 							//close the socket and remove the socket from pfds[]
