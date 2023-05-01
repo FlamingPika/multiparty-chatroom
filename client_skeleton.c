@@ -32,7 +32,7 @@ void* recv_server_msg_handler() {
 	while(1){
 		bzero(buffer, sizeof(buffer));
 		pthread_mutex_lock(&mutexQueue);
-		if (nbytes = recv(sockfd, buffer, sizeof(buffer), 0)==-1){
+		if ((nbytes = recv(sockfd, buffer, sizeof(buffer), 0))==-1){
 			perror("recv");
 		}
 		pthread_mutex_unlock(&mutexQueue);
@@ -82,7 +82,7 @@ int main(){
 	generate_menu();
 	// recieve welcome message to enter the nickname
     bzero(buffer, sizeof(buffer));
-    if (nbytes = recv(sockfd, buffer, sizeof(buffer), 0)==-1){
+    if ((nbytes = recv(sockfd, buffer, sizeof(buffer), 0))==-1){
         perror("recv");
     }
     printf("%s", buffer);
@@ -132,8 +132,11 @@ int main(){
 			/* Send exit message to the server and exit */
 			/* Remember to terminate the thread and close the socket */
 			/********************************************/
-
-
+			printf("Exit message has been sent to the server\n It's OK to close the window now OR enter CTRL+C\n ");
+			if (send(sockfd, buffer, sizeof(buffer), 0)<0){
+				puts("Sending MSG_EXIT failed");
+				exit(1);
+			}
 
 		}
 		else if (strncmp(buffer, "WHO", 3) == 0) {
