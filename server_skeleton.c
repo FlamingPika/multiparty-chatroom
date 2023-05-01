@@ -25,6 +25,10 @@ void user_add(user_info_t *user);
 char * get_username(int sockfd);
 /* Get user sockfd by name */
 int get_sockfd(char *name);
+/* Get user state by name */
+int get_state(char* name);
+/* Change user state by name */
+void update_status(char* name, int ss);
 
 /* Add user to userList */
 void user_add(user_info_t *user){
@@ -77,6 +81,7 @@ int get_state(char* name) {
 	return state;
 }
 
+/* For debugging purpose: print all the properties of a user inside the listOfUsers array */
 void print_info(char *name) {
 	int i;
 
