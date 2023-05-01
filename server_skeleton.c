@@ -92,6 +92,7 @@ int get_sockfd(char *name){
 
 	return sock;
 }
+
 // The following two functions are defined for poll()
 // Add a new file descriptor to the set
 void add_to_pfds(struct pollfd *pfds[], int newfd, int *fd_count, int *fd_size)
@@ -108,6 +109,7 @@ void add_to_pfds(struct pollfd *pfds[], int newfd, int *fd_count, int *fd_size)
 
     (*fd_count)++;
 }
+
 // Remove an index from the set
 void del_from_pfds(struct pollfd pfds[], int i, int* fd_count)
 {
@@ -116,7 +118,6 @@ void del_from_pfds(struct pollfd pfds[], int i, int* fd_count)
 
 	(*fd_count)--;
 }
-
 
 
 int main(){
@@ -236,12 +237,21 @@ int main(){
 								/********************************/
 								/* it is a new user and we need to handle the registration*/
 								/**********************************/
-						
+								user_info_t new_user;
+								new_user.sockfd = pfds[i].fd;
+								strncpy(new_user.username, name, strlen(name));
+								new_user.state = 1;
+
+								user_add(&new_user); //need handle if full
 
 								/********************************/
 								/* create message box (e.g., a text file) for the new user */
 								/**********************************/
-				
+								char filename[strlen(name) + 4];
+								strcpy(filename, name);
+								strcat(filename, ".txt");
+								FILE *fp = fopen(filename, "w");
+								fclose(fp);
 
 								// broadcast the welcome message (send to everyone except the listener)
 								bzero(buffer, sizeof(buffer));
@@ -253,11 +263,20 @@ int main(){
 								/*****************************/
 								/* Broadcast the welcome message*/
 								/*****************************/
-			
+								for(j = 0; j < fd_count; j++){
+									if (pfds[j].fd != listener) {
+										if (send(pfds[j].fd, buffer, sizeof(buffer), 0) == -1)
+											perror("send");
+									}
+								}
 
 								/*****************************/
 								/* send registration success message to the new user*/
 								/*****************************/
+								bzero(buffer, sizeof(buffer));
+								strcpy(buffer, "a new account has been successfully created!\n");
+								if (send(pfds[i].fd, buffer, sizeof(buffer), 0) == -1)
+									perror("send");
 								
 							} else {
 								/********************************/
@@ -269,12 +288,31 @@ int main(){
 								/**********************************/
 
 
+								char filename[strlen(name) + 4];
+								strcpy(filename, name);
+								strcat(filename, ".txt");
+								FILE *fp = fopen(filename, "r");
+								bzero(buffer, sizeof(buffer));
+								while (fgets(buffer, sizeof(buffer), fp)) {
+									if (send(pfds[i].fd, buffer, sizeof(buffer), 0) == -1)
+										perror("send");
+									bzero(buffer, sizeof(buffer));
+								}
+								fclose(fp);
+								fp = fopen(filename, "w");
+								fclose(fp);
+
 
 								// broadcast the welcome message (send to everyone except the listener)
 								bzero(buffer, sizeof(buffer));
 								strcat(buffer, name);
 								strcat(buffer, " is online!\n");
-								
+								for(j = 0; j < fd_count; j++){
+									if (pfds[j].fd != listener) {
+										if (send(pfds[j].fd, buffer, sizeof(buffer), 0) == -1)
+											perror("send");
+									}
+								}
 
 								/*****************************/
 								/* Broadcast the welcome message*/
