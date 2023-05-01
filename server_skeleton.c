@@ -425,9 +425,18 @@ int main(){
 							/* Concatenate all the user names into the tab-separated char ToClient and send it to the requesting client*/
 							/* The state of each user (online or offline)should be labelled.*/
 							/***************************************/
-
-
-
+							for (j = 0; j < users_count; ++j) {
+								if (listOfUsers[j]->state == 1) {
+									strcat(ToClient, listOfUsers[j]->username);
+									strcat(ToClient, "*\t");
+								} else {
+									strcat(ToClient, listOfUsers[j]->username);
+									strcat(ToClient, "\t");
+								}
+							}
+							strcat(ToClient, "\n");
+							if (send(pfds[i].fd, ToClient, sizeof(ToClient), 0) == -1)
+								perror("send");
 
 						}
 						else if (strncmp(buffer, "#", 1)==0){
