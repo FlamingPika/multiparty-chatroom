@@ -58,6 +58,23 @@ int isNewUser(char* name) {
 	return flag;
 }
 
+int get_state(char* name) {
+	int i;
+	int state = -1;
+	/*******************************************/
+	/* Compare the name with existing usernames */
+	/*******************************************/
+	printf("adding new user: %s\n", name);
+	for (i = 0; i < users_count; i++) {
+		if (strcmp(listOfUsers[i]->username, name) == 0) {
+			state = listOfUsers[i]->state;
+			break;
+		}
+	}
+
+	return state;
+}
+
 /* Get user name from userList */
 char * get_username(int ss){
 	int i;
@@ -282,41 +299,48 @@ int main(){
 								/********************************/
 								/* it's an existing user and we need to handle the login. Note the state of user,*/
 								/**********************************/
-								printf("Welcome back! The message box contains:\n");		
-								/********************************/
-								/* send the offline messages to the user and empty the message box*/
-								/**********************************/
-
-
-								char filename[strlen(name) + 4];
-								strcpy(filename, name);
-								strcat(filename, ".txt");
-								FILE *fp = fopen(filename, "r");
-								bzero(buffer, sizeof(buffer));
-								while (fgets(buffer, sizeof(buffer), fp)) {
+								if (get_state(name) == 1) {
+									bzero(buffer, sizeof(buffer));
+									strcpy(buffer, "You have already logged in!\n");
 									if (send(pfds[i].fd, buffer, sizeof(buffer), 0) == -1)
 										perror("send");
+								} else {
+									printf("Welcome back! The message box contains:\n");		
+									/********************************/
+									/* send the offline messages to the user and empty the message box*/
+									/**********************************/
+
+
+									char filename[strlen(name) + 4];
+									strcpy(filename, name);
+									strcat(filename, ".txt");
+									FILE *fp = fopen(filename, "r");
 									bzero(buffer, sizeof(buffer));
-								}
-								fclose(fp);
-								fp = fopen(filename, "w");
-								fclose(fp);
-
-
-								// broadcast the welcome message (send to everyone except the listener)
-								bzero(buffer, sizeof(buffer));
-								strcat(buffer, name);
-								strcat(buffer, " is online!\n");
-								for(j = 0; j < fd_count; j++){
-									if (pfds[j].fd != listener) {
-										if (send(pfds[j].fd, buffer, sizeof(buffer), 0) == -1)
+									while (fgets(buffer, sizeof(buffer), fp)) {
+										if (send(pfds[i].fd, buffer, sizeof(buffer), 0) == -1)
 											perror("send");
+										bzero(buffer, sizeof(buffer));
+									}
+									fclose(fp);
+									fp = fopen(filename, "w");
+									fclose(fp);
+
+
+									// broadcast the welcome message (send to everyone except the listener)
+									bzero(buffer, sizeof(buffer));
+									strcat(buffer, name);
+									strcat(buffer, " is online!\n");
+
+									/*****************************/
+									/* Broadcast the welcome message*/
+									/*****************************/
+									for(j = 0; j < fd_count; j++){
+										if (pfds[j].fd != listener) {
+											if (send(pfds[j].fd, buffer, sizeof(buffer), 0) == -1)
+												perror("send");
+										}
 									}
 								}
-
-								/*****************************/
-								/* Broadcast the welcome message*/
-								/*****************************/
 							}
 						}
 						else if (strncmp(buffer, "EXIT", 4)==0){
