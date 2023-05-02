@@ -40,14 +40,6 @@ void* recv_server_msg_handler() {
 	}
 	return NULL;
 
-	// pthread_mutex_lock(&mutex);
-
-    // while (!should_exit) {
-    //     pthread_cond_wait(&cond, &mutex);
-    // }
-
-    // pthread_mutex_unlock(&mutex);
-
 }
 
 int main(){
@@ -55,6 +47,7 @@ int main(){
 	int nbytes;
 	struct sockaddr_in server_addr, client_addr;
 	char buffer[MAX];
+	char name[C_NAME_LEN];
 	
 	/******************************************************/
 	/* create the client socket and connect to the server */
@@ -95,9 +88,14 @@ int main(){
 	bzero(buffer, sizeof(buffer));
 	strcpy(buffer, "REGISTER ");
 	n = 9;
-	while ((buffer[n++] = getchar()) != '\n');
+	char c;
+	while (c != '\n') {
+		c = getchar();
+		buffer[n++] = c;
+		name[n - 10] = c;
+	}
 	buffer[n] = '\0';
-	write(sockfd, buffer, sizeof(buffer));
+	send(sockfd, buffer, sizeof(buffer), 0);
 
     // receive welcome message "welcome xx to joint the chatroom. A new account has been created." (registration case) or "welcome back! The message box contains:..." (login case)
     bzero(buffer, sizeof(buffer));
@@ -132,11 +130,13 @@ int main(){
 			/* Send exit message to the server and exit */
 			/* Remember to terminate the thread and close the socket */
 			/********************************************/
-			printf("Exit message has been sent to the server\n It's OK to close the window now OR enter CTRL+C\n ");
+			printf("Exit message has been sent to the server\nIt's OK to close the window now OR enter CTRL+C\n ");
 			if (send(sockfd, buffer, sizeof(buffer), 0)<0){
 				puts("Sending MSG_EXIT failed");
 				exit(1);
 			}
+			pthread_mutex_destroy(&mutexQueue);
+    		pthread_cond_destroy(&condQueue);
 
 		}
 		else if (strncmp(buffer, "WHO", 3) == 0) {
@@ -158,14 +158,16 @@ int main(){
 			/*************************************/
 			/* Sending broadcast message. The send message should be of the format "username: message"*/
 			/**************************************/
-
+			if (send(sockfd, buffer, sizeof(buffer), 0)<0){
+				printf("Sending broadcast message failed...");
+				exit(1);
+			}
 
 			
 		}
 	}
 
-	pthread_mutex_destroy(&mutexQueue);
-    pthread_cond_destroy(&condQueue);
+	
 
 	return 0;
 }
