@@ -107,8 +107,8 @@ void update_status(char* name, int ss) {
 				listOfUsers[i]->state = 0;
 			} else {
 				listOfUsers[i]->state = 1;
-				listOfUsers[i]->sockfd = ss;
 			}
+			listOfUsers[i]->sockfd = ss;
 			break;
 		}
 	}
@@ -134,7 +134,7 @@ char * get_username(int ss){
 /* Get user sockfd by name */
 int get_sockfd(char *name){
 	int i;
-	int sock;
+	int sock = -1;
 	/*******************************************/
 	/* Get the user sockfd by the user name */
 	/*******************************************/
@@ -278,6 +278,7 @@ int main(){
 						del_from_pfds(pfds, i, &fd_count);
 					} else {
 						// we got some data from a client
+						
 						if (strncmp(buffer, "REGISTER", 8)==0){
 							printf("Got register/login message\n");
 							/********************************/
@@ -298,7 +299,6 @@ int main(){
 								new_user->state = 1;
 
 								user_add(new_user); //need handle if full
-
 								/********************************/
 								/* create message box (e.g., a text file) for the new user */
 								/**********************************/
@@ -337,8 +337,6 @@ int main(){
 								/********************************/
 								/* it's an existing user and we need to handle the login. Note the state of user,*/
 								/**********************************/
-								// print_info(name);
-								// printf("This socket is %d\n", pfds[i].fd);
 								if (get_state(name) == 1) {
 									bzero(buffer, sizeof(buffer));
 									strcpy(buffer, "You have already logged in!\n");
@@ -354,9 +352,7 @@ int main(){
 									/********************************/
 									/* send the offline messages to the user and empty the message box*/
 									/**********************************/
-									print_info(name);
 									update_status(name, pfds[i].fd);
-									print_info(name);
 									char filename[strlen(name) + 4];
 									strcpy(filename, name);
 									strcat(filename, ".txt");
@@ -445,51 +441,91 @@ int main(){
 							printf("Got direct message.\n");
 							// get which client sends the message
 							char sendname[MAX];
+							bzero(sendname, sizeof(sendname));
 							// get the destination username
 							char destname[MAX];
+							bzero(destname, sizeof(destname));
 							// get dest sock
 							int destsock;
 							// get the message
 							char msg[MAX];
+							bzero(msg, sizeof(msg));
 							/**************************************/
 							/* Get the source name xx, the target username and its sockfd*/
 							/*************************************/
+							// get the source name
+							char *name = get_username(pfds[i].fd);
+							strcpy(sendname, name);
+							char *colon_ptr = strchr(buffer, ':');
+							strncpy(destname, buffer + 1, colon_ptr - buffer - 1);
+							strncpy(msg, colon_ptr + 1, strlen(buffer) - strlen(destname) - 1);
 
+							destsock = get_sockfd(destname);
 
 							if (destsock == -1) {
 								/**************************************/
 								/* The target user is not found. Send "no such user..." messsge back to the source client*/
 								/*************************************/
-
+								char sendmsg[MAX];
+								bzero(sendmsg, sizeof(sendmsg));
+								strcpy(sendmsg, "There is no such user. Please check your input format.\n");
+								if (send(pfds[i].fd, sendmsg, sizeof(sendmsg), 0) == -1)
+									perror("send");
+								
 							} else {
 								// The target user exists.
 								// concatenate the message in the form "xx to you: msg"
 								char sendmsg[MAX];
+								bzero(sendmsg, sizeof(sendmsg));
 								strcpy(sendmsg, sendname);
-								strcat(sendmsg, " to you: ");
+								strcat(sendmsg, " to you:");
 								strcat(sendmsg, msg);
+								bzero(buffer, sizeof(buffer));
 
 								/**************************************/
 								/* According to the state of target user, send the msg to online user or write the msg into offline user's message box*/
 								/* For the offline case, send "...Leaving message successfully" message to the source client*/
 								/*************************************/
+								if (get_state(destname) == 1) {
+									if (send(destsock, sendmsg, sizeof(sendmsg), 0) == -1)
+										perror("send");
+								} else {
+									// write the message into the message box
+									char filename[MAX];
+									strcpy(filename, destname);
+									strcat(filename, ".txt");
+									FILE *fp = fopen(filename, "a");
+									fprintf(fp, "%s\n", sendmsg);
+									fclose(fp);
+									// send the leaving message to the source client
+									char sendmsg[MAX];
+									strcpy(sendmsg, destname);
+									strcat(sendmsg, " is offline. Leaving message successfully.\n");
+									if (send(pfds[i].fd, sendmsg, sizeof(sendmsg), 0) == -1)
+										perror("send");
+								}
 									
-							}
-									
-									
-
-							if (send(destsock, sendmsg, sizeof(sendmsg), 0) == -1){
-								perror("send");
 							}
 
 						} else{
-						printf("Got broadcast message from user\n");
-						/*********************************************/
-						/* Broadcast the message to all users except the one who sent the message*/
-						/*********************************************/
-
+							printf("Got broadcast message from user\n");
+							/*********************************************/
+							/* Broadcast the message to all users except the one who sent the message*/
+							/*********************************************/
+							char *name = get_username(pfds[i].fd);
+							char sendmsg[MAX];
+							bzero(sendmsg, sizeof(sendmsg));
+							strcpy(sendmsg, name);
+							strcat(sendmsg, ": ");
+							strcat(sendmsg, buffer);
+							for (j = 0; j < fd_count; j++) {
+								if (pfds[j].fd != listener && pfds[j].fd != pfds[i].fd) {
+									if (send(pfds[j].fd, sendmsg, sizeof(sendmsg), 0) == -1)
+										perror("send");
+								}
+							}
 								
-					}   
+						}   
 					}
                 }
             } // end handle data from client
