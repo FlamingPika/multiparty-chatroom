@@ -20,7 +20,7 @@ static user_info_t *listOfUsers[MAX_USERS] = {0}; // list of users
 
 
 /* Add user to userList */
-void user_add(user_info_t *user);
+int user_add(user_info_t *user);
 /* Get user name from userList */
 char * get_username(int sockfd);
 /* Get user sockfd by name */
@@ -29,12 +29,14 @@ int get_sockfd(char *name);
 int get_state(char* name);
 /* Change user state by name */
 void update_status(char* name, int ss);
+/* Determine whether the user has been registered  */
+int isNewUser(char* name);
 
 /* Add user to userList */
-void user_add(user_info_t *user){
+int user_add(user_info_t *user){
 	if(users_count ==  MAX_USERS){
 		printf("sorry the system is full, please try again later\n");
-		return;
+		return -1;
 	}
 	/***************************/
 	/* add the user to the list */
@@ -42,6 +44,7 @@ void user_add(user_info_t *user){
 	printf("adding new user: %s\n", user->username);
 	listOfUsers[users_count] = user;
 	users_count++;
+	return 1;
 
 }
 
@@ -269,6 +272,7 @@ int main(){
 						// got error or connection closed by client
 						if (nbytes == 0) {
 							// connection closed
+							update_status(get_username(pfds[i].fd), 0);
 							printf("pollserver: socket %d hung up\n", pfds[i].fd);
 						} else {
 							perror("recv");
@@ -297,40 +301,48 @@ int main(){
 								strcpy(new_user->username, name);
 								new_user->state = 1;
 
-								user_add(new_user); //need handle if full
-								/********************************/
-								/* create message box (e.g., a text file) for the new user */
-								/**********************************/
-								char filename[strlen(name) + 4];
-								strcpy(filename, name);
-								strcat(filename, ".txt");
-								FILE *fp = fopen(filename, "w");
-								fclose(fp);
-								// print_info();
-								// broadcast the welcome message (send to everyone except the listener)
-								bzero(buffer, sizeof(buffer));
-								strcpy(buffer, "Welcome ");
-								strcat(buffer, name);
-								strcat(buffer, " to join the chat room!\n");
+								if (user_add(new_user) == -1) {
+									bzero(buffer, sizeof(buffer));
+									strcpy(buffer, "The chat room is full. Please try again later.\n");
+									if (send(pfds[i].fd, buffer, sizeof(buffer), 0) == -1)
+										perror("send");
+									close(pfds[i].fd);
+									del_from_pfds(pfds, i, &fd_count);
+								} else {
+									/********************************/
+									/* create message box (e.g., a text file) for the new user */
+									/**********************************/
+									char filename[strlen(name) + 4];
+									strcpy(filename, name);
+									strcat(filename, ".txt");
+									FILE *fp = fopen(filename, "w");
+									fclose(fp);
+									// print_info();
+									// broadcast the welcome message (send to everyone except the listener)
+									bzero(buffer, sizeof(buffer));
+									strcpy(buffer, "Welcome ");
+									strcat(buffer, name);
+									strcat(buffer, " to join the chat room!\n");
 
 
-								/*****************************/
-								/* Broadcast the welcome message*/
-								/*****************************/
-								for(j = 0; j < fd_count; j++){
-									if (pfds[j].fd != listener) {
-										if (send(pfds[j].fd, buffer, sizeof(buffer), 0) == -1)
-											perror("send");
+									/*****************************/
+									/* Broadcast the welcome message*/
+									/*****************************/
+									for(j = 0; j < fd_count; j++){
+										if (pfds[j].fd != listener) {
+											if (send(pfds[j].fd, buffer, sizeof(buffer), 0) == -1)
+												perror("send");
+										}
 									}
-								}
 
-								/*****************************/
-								/* send registration success message to the new user*/
-								/*****************************/
-								bzero(buffer, sizeof(buffer));
-								strcpy(buffer, "a new account has been successfully created!\n");
-								if (send(pfds[i].fd, buffer, sizeof(buffer), 0) == -1)
-									perror("send");
+									/*****************************/
+									/* send registration success message to the new user*/
+									/*****************************/
+									bzero(buffer, sizeof(buffer));
+									strcpy(buffer, "a new account has been successfully created!\n");
+									if (send(pfds[i].fd, buffer, sizeof(buffer), 0) == -1)
+										perror("send");
+								}
 								
 							} else {
 								/********************************/
@@ -420,6 +432,8 @@ int main(){
 							/* The state of each user (online or offline)should be labelled.*/
 							/***************************************/
 							for (j = 0; j < users_count; ++j) {
+								if (strcmp(listOfUsers[j]->username, get_username(pfds[i].fd)) == 0)
+									continue;
 								if (listOfUsers[j]->state == 1) {
 									strcat(ToClient, listOfUsers[j]->username);
 									strcat(ToClient, "*\t");
@@ -452,57 +466,65 @@ int main(){
 							/* Get the source name xx, the target username and its sockfd*/
 							/*************************************/
 							// get the source name
-							char *name = get_username(pfds[i].fd);
-							strcpy(sendname, name);
-							char *colon_ptr = strchr(buffer, ':');
-							strncpy(destname, buffer + 1, colon_ptr - buffer - 1);
-							strncpy(msg, colon_ptr + 1, strlen(buffer) - strlen(destname) - 1);
-
-							destsock = get_sockfd(destname);
-
-							if (destsock == -1) {
-								/**************************************/
-								/* The target user is not found. Send "no such user..." messsge back to the source client*/
-								/*************************************/
-								char sendmsg[MAX];
-								bzero(sendmsg, sizeof(sendmsg));
-								strcpy(sendmsg, "There is no such user. Please check your input format.\n");
-								if (send(pfds[i].fd, sendmsg, sizeof(sendmsg), 0) == -1)
-									perror("send");
-								
-							} else {
-								// The target user exists.
-								// concatenate the message in the form "xx to you: msg"
-								char sendmsg[MAX];
-								bzero(sendmsg, sizeof(sendmsg));
-								strcpy(sendmsg, sendname);
-								strcat(sendmsg, " to you:");
-								strcat(sendmsg, msg);
+							if(strchr(buffer, ':') == NULL) {
 								bzero(buffer, sizeof(buffer));
+								strcpy(buffer, "Please check your input format.\n");
+								if (send(pfds[i].fd, buffer, sizeof(buffer), 0) == -1)
+									perror("send");
+							} else {
+								char *name = get_username(pfds[i].fd);
+								strcpy(sendname, name);
+								
+								char *colon_ptr = strchr(buffer, ':');
+								strncpy(destname, buffer + 1, colon_ptr - buffer - 1);
+								strncpy(msg, colon_ptr + 1, strlen(buffer) - strlen(destname) - 1);
 
-								/**************************************/
-								/* According to the state of target user, send the msg to online user or write the msg into offline user's message box*/
-								/* For the offline case, send "...Leaving message successfully" message to the source client*/
-								/*************************************/
-								if (get_state(destname) == 1) {
-									if (send(destsock, sendmsg, sizeof(sendmsg), 0) == -1)
-										perror("send");
-								} else {
-									// write the message into the message box
-									char filename[MAX];
-									strcpy(filename, destname);
-									strcat(filename, ".txt");
-									FILE *fp = fopen(filename, "a");
-									fprintf(fp, "%s", sendmsg);
-									fclose(fp);
-									// send the leaving message to the source client
+								destsock = get_sockfd(destname);
+
+								if (destsock == -1) {
+									/**************************************/
+									/* The target user is not found. Send "no such user..." messsge back to the source client*/
+									/*************************************/
 									char sendmsg[MAX];
-									strcpy(sendmsg, destname);
-									strcat(sendmsg, " is offline. Leaving message successfully.\n");
+									bzero(sendmsg, sizeof(sendmsg));
+									strcpy(sendmsg, "There is no such user. Please check your input format.\n");
 									if (send(pfds[i].fd, sendmsg, sizeof(sendmsg), 0) == -1)
 										perror("send");
-								}
 									
+								} else {
+									// The target user exists.
+									// concatenate the message in the form "xx to you: msg"
+									char sendmsg[MAX];
+									bzero(sendmsg, sizeof(sendmsg));
+									strcpy(sendmsg, sendname);
+									strcat(sendmsg, " to you:");
+									strcat(sendmsg, msg);
+									bzero(buffer, sizeof(buffer));
+
+									/**************************************/
+									/* According to the state of target user, send the msg to online user or write the msg into offline user's message box*/
+									/* For the offline case, send "...Leaving message successfully" message to the source client*/
+									/*************************************/
+									if (get_state(destname) == 1) {
+										if (send(destsock, sendmsg, sizeof(sendmsg), 0) == -1)
+											perror("send");
+									} else {
+										// write the message into the message box
+										char filename[MAX];
+										strcpy(filename, destname);
+										strcat(filename, ".txt");
+										FILE *fp = fopen(filename, "a");
+										fprintf(fp, "%s", sendmsg);
+										fclose(fp);
+										// send the leaving message to the source client
+										char sendmsg[MAX];
+										strcpy(sendmsg, destname);
+										strcat(sendmsg, " is offline. Leaving message successfully.\n");
+										if (send(pfds[i].fd, sendmsg, sizeof(sendmsg), 0) == -1)
+											perror("send");
+									}
+										
+								}
 							}
 
 						} else{
