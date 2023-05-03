@@ -31,11 +31,10 @@ void* recv_server_msg_handler() {
 	int nbytes;
 	while(1){
 		bzero(buffer, sizeof(buffer));
-		pthread_mutex_lock(&mutexQueue);
+		
 		if ((nbytes = recv(sockfd, buffer, sizeof(buffer), 0))==-1){
 			perror("recv");
 		}
-		pthread_mutex_unlock(&mutexQueue);
 		printf("%s", buffer);
 	}
 	return NULL;
@@ -47,7 +46,7 @@ int main(){
 	int nbytes;
 	struct sockaddr_in server_addr, client_addr;
 	char buffer[MAX];
-	char name[C_NAME_LEN];
+	char name[MAX];
 	
 	/******************************************************/
 	/* create the client socket and connect to the server */
@@ -89,10 +88,25 @@ int main(){
 	strcpy(buffer, "REGISTER ");
 	n = 9;
 	char c;
-	while (c != '\n') {
-		c = getchar();
-		buffer[n++] = c;
-		name[n - 10] = c;
+	int validName = 0;
+	while(!validName){
+		while (c != '\n') {
+			c = getchar();
+			if (n == MAX - 1)
+				break;
+			buffer[n++] = c;
+			name[n - 10] = c;
+		}
+		if (n - 10 >= C_NAME_LEN - 1) {
+			printf("Your name is too long, please try again\n");
+			bzero(buffer, sizeof(buffer));
+			bzero(name, sizeof(name));
+			strcpy(buffer, "REGISTER ");
+			n = 9;
+			c='\0';
+		} else {
+			validName = 1;
+		}
 	}
 	buffer[n] = '\0';
 	send(sockfd, buffer, sizeof(buffer), 0);
@@ -115,8 +129,6 @@ int main(){
     if (pthread_create(&recv_server_msg_thread, NULL, &recv_server_msg_handler, NULL) != 0) {
         perror("Failed to create the thread");
     }
-
-    
     
 	// chat with the server
 	for (;;) {
@@ -162,12 +174,12 @@ int main(){
 				printf("Sending broadcast message failed...");
 				exit(1);
 			}
-
-			
+	
 		}
 	}
 
-	
+	getch();
+    endwin();
 
 	return 0;
 }
