@@ -178,9 +178,6 @@ int main(){
 		}
 	}
 
-	getch();
-    endwin();
-
 	return 0;
 }
 
