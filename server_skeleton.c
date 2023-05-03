@@ -82,16 +82,15 @@ int get_state(char* name) {
 }
 
 /* For debugging purpose: print all the properties of a user inside the listOfUsers array */
-void print_info(char *name) {
+void print_info() {
 	int i;
 
 	for (i = 0; i < users_count; i++) {
-		if (strcmp(listOfUsers[i]->username, name) == 0) {
-			printf("username: %s\n", listOfUsers[i]->username);
-			printf("sockfd: %d\n", listOfUsers[i]->sockfd);
-			printf("state: %d\n", listOfUsers[i]->state);
-			break;
-		}
+		printf("/*************/\n");
+		printf("username: %s\n", listOfUsers[i]->username);
+		printf("sockfd: %d\n", listOfUsers[i]->sockfd);
+		printf("state: %d\n", listOfUsers[i]->state);
+		printf("/*************/\n");
 	}
 }
 
@@ -307,7 +306,7 @@ int main(){
 								strcat(filename, ".txt");
 								FILE *fp = fopen(filename, "w");
 								fclose(fp);
-
+								// print_info();
 								// broadcast the welcome message (send to everyone except the listener)
 								bzero(buffer, sizeof(buffer));
 								strcpy(buffer, "Welcome ");
@@ -406,7 +405,6 @@ int main(){
 							/* Change the state of this user to offline*/
 							/**********************************/
 							update_status(name, 0);
-
 									
 							//close the socket and remove the socket from pfds[]
 							close(pfds[i].fd);
@@ -495,7 +493,7 @@ int main(){
 									strcpy(filename, destname);
 									strcat(filename, ".txt");
 									FILE *fp = fopen(filename, "a");
-									fprintf(fp, "%s\n", sendmsg);
+									fprintf(fp, "%s", sendmsg);
 									fclose(fp);
 									// send the leaving message to the source client
 									char sendmsg[MAX];
